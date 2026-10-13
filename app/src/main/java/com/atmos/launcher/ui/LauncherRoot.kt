@@ -5,6 +5,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import com.atmos.launcher.data.media.MediaHub
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import android.net.Uri
 import android.service.notification.NotificationListenerService
 import androidx.activity.compose.BackHandler
@@ -86,16 +90,35 @@ private fun LifecycleRefresh(container: Container) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_START) {
                 container.weather.refresh()
-                if (NotificationHub.isAccessGranted(ctx) && !NotificationHub.connected.value) {
-                    try {
-                        NotificationListenerService.requestRebind(ComponentName(ctx, AtmosNotificationListener::class.java))
-                    } catch (_: Throwable) {}
+                val cn = ComponentName(ctx, AtmosNotificationListener::class.java)
+                if (NotificationHub.isAccessGranted(ctx)) {
+                    MediaHub.attach(ctx.applicationContext, cn)
+                    if (!NotificationHub.connected.value) {
+                        try { NotificationListenerService.requestRebind(cn) } catch (_: Throwable) {}
+                        container.scope.launch {
+                            delay(2500)
+                            if (!NotificationHub.connected.value) forceRebind(ctx, cn)
+                        }
+                    }
                 }
             }
         }
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
+}
+
+/**
+ * Truco conocido para Xiaomi/HyperOS: desactivar y reactivar el componente obliga al sistema a volver
+ * a enlazar el NotificationListenerService (requestRebind a veces se ignora tras actualizar la app).
+ */
+private fun forceRebind(ctx: Context, cn: ComponentName) {
+    val pm = ctx.packageManager
+    try {
+        pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+        NotificationListenerService.requestRebind(cn)
+    } catch (_: Throwable) {}
 }
 
 @Composable

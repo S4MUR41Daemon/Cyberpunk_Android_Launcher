@@ -229,7 +229,7 @@ class AtmosNotificationListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         NotificationHub.detach()
-        MediaHub.detach()
+        // MediaHub sigue enganchado desde la app: no depende del enlace del servicio.
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = NotificationHub.onPosted(this, sbn)

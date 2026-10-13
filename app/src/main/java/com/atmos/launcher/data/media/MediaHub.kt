@@ -86,14 +86,22 @@ object MediaHub {
         override fun onSessionDestroyed() = reevaluate()
     }
 
+    /**
+     * Leer las sesiones solo exige que el acceso a notificaciones esté CONCEDIDO, no que el listener
+     * esté enlazado. Así la música sigue funcionando aunque HyperOS desconecte el servicio.
+     * Idempotente: se puede llamar en cada vuelta al primer plano.
+     */
     fun attach(context: Context, listener: ComponentName) {
         ctx = context.applicationContext
+        if (msm != null) { reevaluate(); return }
         val m = context.getSystemService(MediaSessionManager::class.java) ?: return
         msm = m
         try {
             m.addOnActiveSessionsChangedListener(sessionsListener, listener, main)
             pick(m.getActiveSessions(listener))
-        } catch (_: SecurityException) {}
+        } catch (_: SecurityException) {
+            msm = null // aún sin permiso: se reintentará en el próximo ON_START
+        }
     }
 
     fun detach() {
