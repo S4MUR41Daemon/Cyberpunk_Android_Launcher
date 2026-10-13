@@ -1,9 +1,31 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+}
+
+// ── Firma compartida ATMOS ──────────────────────────────────────────────
+// La misma clave firma ATMOS y el launcher → el permiso de firma que los conecta funciona.
+// En GitHub Actions llega por variables de entorno (secretos); en el PC, local.properties apunta
+// al fichero keystore.properties (fuera del repo). Si no hay clave, se usa la debug como antes.
+val atmosSigning: Map<String, String>? = run {
+    System.getenv("ATMOS_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { path ->
+        return@run mapOf(
+            "storeFile" to path,
+            "storePassword" to System.getenv("ATMOS_KEYSTORE_PASSWORD").orEmpty(),
+            "keyAlias" to System.getenv("ATMOS_KEY_ALIAS").orEmpty(),
+            "keyPassword" to System.getenv("ATMOS_KEY_PASSWORD").orEmpty()
+        )
+    }
+    val local = Properties()
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { local.load(it) }
+    val f = local.getProperty("atmos.keystore.props")?.let { file(it) }?.takeIf { it.exists() } ?: return@run null
+    val p = Properties().apply { f.inputStream().use { load(it) } }
+    p.stringPropertyNames().associateWith { p.getProperty(it) }
 }
 
 android {
@@ -18,13 +40,21 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (atmosSigning != null) create("atmos") {
+            storeFile = file(atmosSigning.getValue("storeFile"))
+            storePassword = atmosSigning.getValue("storePassword")
+            keyAlias = atmosSigning.getValue("keyAlias")
+            keyPassword = atmosSigning.getValue("keyPassword")
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Misma clave debug que ATMOS en este PC → el permiso de firma compartido funciona.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (atmosSigning != null) signingConfigs.getByName("atmos") else signingConfigs.getByName("debug")
         }
     }
 
