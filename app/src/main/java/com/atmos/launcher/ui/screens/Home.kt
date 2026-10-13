@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -219,7 +220,8 @@ private fun WeatherModule(w: WeatherState, modifier: Modifier, onClick: () -> Un
             )
         } else {
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
-                ScanlineText("${d.temp}°", raj(46.sp, tracking = 0f), p.text)
+                ScanlineText("${d.temp}", raj(46.sp, tracking = 0f), p.text)
+                Text("°", style = raj(26.sp, tracking = 0f, color = p.primary), modifier = Modifier.align(Alignment.Top).padding(top = 2.dp))
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     TagChip(d.code, p.tertiary)
@@ -305,6 +307,7 @@ fun Cover(m: MediaState?, size: androidx.compose.ui.unit.Dp, label: Boolean = fa
     Box(
         Modifier
             .then(if (fill) Modifier.fillMaxSize() else Modifier.size(size))
+            .clipToBounds()
             .border(1.dp, p.secondary.copy(alpha = 0.6f))
             .drawBehind { hatch(p.secondary.copy(alpha = 0.3f), 7.dp.toPx(), 3.dp.toPx()) },
         contentAlignment = Alignment.Center

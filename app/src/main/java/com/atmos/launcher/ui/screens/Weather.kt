@@ -75,6 +75,7 @@ fun WeatherScreen(nav: NavHostController) {
         HudPanel("01", "AHORA", trailing = if (w.isDay) "DÍA" else "NOCHE", onClick = open) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 ScanlineText("${w.temp}", raj(104.sp, tracking = 0f), p.text)
+                Text("°C", style = raj(22.sp, tracking = 0f, color = p.primary), modifier = Modifier.align(Alignment.Top).padding(top = 18.dp))
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     TagChip(w.code, p.tertiary)

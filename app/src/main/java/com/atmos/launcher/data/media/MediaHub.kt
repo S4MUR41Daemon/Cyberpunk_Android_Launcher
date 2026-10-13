@@ -41,6 +41,8 @@ data class MediaState(
     val queue: List<QueueEntry>,
     val likeAction: String?,
     val likeLabel: String?,
+    /** El propio nombre de la acción delata el estado («Eliminar de la colección» = ya guardada). */
+    val liked: Boolean,
     val shuffleAction: String?,
     val repeatAction: String?
 ) {
@@ -64,6 +66,9 @@ object MediaHub {
     private var lastTrackKey: String? = null
     private var artKey: String? = null
     private var artCache: ImageBitmap? = null
+    private var artUriTried: String? = null
+    /** Carátula de la notificación multimedia por paquete (título, imagen): último recurso. */
+    private val notifArt = java.util.concurrent.ConcurrentHashMap<String, Pair<String, ImageBitmap>>()
 
     private val _state = MutableStateFlow<MediaState?>(null)
     val state: StateFlow<MediaState?> = _state
@@ -128,12 +133,22 @@ object MediaHub {
         val album = md.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty()
         val app = ctx?.let { (it as? LauncherApp)?.container?.apps?.labelOf(c.packageName) } ?: c.packageName
 
-        // Carátula: se reduce UNA vez a 512 px y se cachea por pista.
+        // Carátula: se reduce UNA vez a 512 px y se cachea por pista. Spotify suele mandar primero
+        // el texto y la imagen un instante después con el mismo id, así que se reintenta mientras falte.
         val key = md.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: "$title|$artist"
         if (key != artKey) {
             artKey = key
-            val raw: Bitmap? = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            artCache = null
+            artUriTried = null
+        }
+        if (artCache == null) {
+            val raw: Bitmap? = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+                ?: md.description?.iconBitmap
             artCache = raw?.let { scale(it, 512).asImageBitmap() }
+                ?: notifArt[c.packageName]?.takeIf { it.first.equals(title, ignoreCase = true) }?.second
+            if (artCache == null) loadArtUri(md, key)
         }
 
         val custom = ps?.customActions.orEmpty()
@@ -141,7 +156,8 @@ object MediaHub {
             val n = (a.name?.toString() ?: "") + " " + a.action
             words.any { n.contains(it, ignoreCase = true) }
         }
-        val like = find("like", "heart", "favorite", "favourite", "save", "guardar", "me gusta", "add to")
+        val like = find("like", "heart", "favorite", "favourite", "save", "guardar", "me gusta", "add to", "colección", "collection", "biblioteca", "library")
+        val liked = like?.name?.toString()?.let { n -> listOf("eliminar", "quitar", "remove", "unlike", "guardada", "saved").any { n.contains(it, ignoreCase = true) } } == true
 
         _state.value = MediaState(
             pkg = c.packageName, app = app.uppercase(), title = title, artist = artist, album = album, art = artCache,
@@ -152,7 +168,7 @@ object MediaHub {
             queue = c.queue.orEmpty().take(8).map {
                 QueueEntry(it.queueId, it.description.title?.toString().orEmpty(), it.description.subtitle?.toString().orEmpty())
             },
-            likeAction = like?.action, likeLabel = like?.name?.toString(),
+            likeAction = like?.action, likeLabel = like?.name?.toString(), liked = liked,
             shuffleAction = find("shuffle", "aleatori")?.action,
             repeatAction = find("repeat", "repetir")?.action
         )
@@ -168,6 +184,47 @@ object MediaHub {
             }
         }
     }
+
+    /** Algunas apps dan la carátula como URI (content://, file://) en vez de como bitmap. */
+    private fun loadArtUri(md: MediaMetadata, key: String) {
+        val uri = listOf(
+            MediaMetadata.METADATA_KEY_ALBUM_ART_URI, MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI
+        ).firstNotNullOfOrNull { md.getString(it)?.takeIf { s -> s.isNotBlank() } }
+            ?: md.description?.iconUri?.toString()
+            ?: return
+        if (uri == artUriTried) return
+        artUriTried = uri
+        val c = ctx ?: return
+        val u = android.net.Uri.parse(uri)
+        if (u.scheme !in setOf("content", "file", "android.resource")) return
+        scope.launch {
+            val bmp = try {
+                c.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+            } catch (_: Throwable) { null } ?: return@launch
+            main.post {
+                if (artKey == key && artCache == null) {
+                    artCache = scale(bmp, 512).asImageBitmap()
+                    emit()
+                }
+            }
+        }
+    }
+
+    /** Llamado por el listener con el icono grande de la notificación multimedia. */
+    fun offerNotificationArt(pkg: String, title: String, bmp: Bitmap) {
+        val img = scale(bmp, 512).asImageBitmap()
+        notifArt[pkg] = title to img
+        main.post {
+            if (controller?.packageName == pkg && artCache == null &&
+                controller?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).equals(title, ignoreCase = true)
+            ) {
+                artCache = img
+                emit()
+            }
+        }
+    }
+
+    fun hasNotificationArt(pkg: String, title: String) = notifArt[pkg]?.first?.equals(title, ignoreCase = true) == true
 
     private fun scale(b: Bitmap, max: Int): Bitmap {
         val m = maxOf(b.width, b.height)

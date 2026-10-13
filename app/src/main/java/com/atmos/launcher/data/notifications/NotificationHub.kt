@@ -121,7 +121,18 @@ object NotificationHub {
                 val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)
                 if (style != null) unread[convKey(n, style)] = style.messages.size
             }
-            if (isMedia) continue // la tarjeta multimedia del panel ya la muestra
+            if (isMedia) {
+                // La notificación multimedia siempre lleva la carátula como icono grande: fallback para MediaHub.
+                val t = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+                val icon = n.getLargeIcon()
+                if (icon != null && t.isNotEmpty() && !MediaHub.hasNotificationArt(sbn.packageName, t)) {
+                    val pkg = sbn.packageName
+                    scope.launch {
+                        try { icon.loadDrawable(s)?.toBitmap()?.let { MediaHub.offerNotificationArt(pkg, t, it) } } catch (_: Throwable) {}
+                    }
+                }
+                continue // la tarjeta multimedia del panel ya la muestra
+            }
             val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
             val body = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
             if (title.isEmpty() && body.isEmpty()) continue

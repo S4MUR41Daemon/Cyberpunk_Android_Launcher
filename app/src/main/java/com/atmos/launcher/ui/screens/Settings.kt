@@ -209,7 +209,7 @@ fun OnboardingScreen() {
         SegBarSteps(step)
 
         when (step) {
-            0 -> HudPanel("01", "ESTABLECER COMO LAUNCHER") {
+            0 -> HudPanel("01", "PANTALLA DE INICIO") {
                 val home = remember(tick) { Perms.isDefaultHome(ctx) }
                 Text(
                     "ATMOS//OS sustituye a la pantalla de inicio. Puedes volver al launcher anterior cuando quieras desde Ajustes › Aplicaciones › Apps predeterminadas.",

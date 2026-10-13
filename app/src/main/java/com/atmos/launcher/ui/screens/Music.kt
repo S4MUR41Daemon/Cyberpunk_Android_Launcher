@@ -136,7 +136,7 @@ fun PlayerScreen(nav: NavHostController) {
         return
     }
     val pos by rememberPosition(m)
-    var liked by remember(m.title) { mutableStateOf(false) }
+    var liked by remember(m.title, m.liked) { mutableStateOf(m.liked) }
 
     Column(
         Modifier.fillMaxSize().glitchEnter().verticalScroll(rememberScrollState())
