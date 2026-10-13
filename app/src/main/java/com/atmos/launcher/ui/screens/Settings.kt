@@ -178,7 +178,8 @@ fun SettingsScreen(settings: LauncherSettings, nav: NavHostController) {
             CyberButton("ABRIR ATMOS ↗", Modifier.fillMaxWidth().padding(top = 10.dp)) { c.weather.openAtmos() }
         }
         HudPanel("07", "HOLOGRAMA", trailing = "FONDO DEL INICIO") { HologramBlock(settings) }
-        HudPanel("08", "PERMISOS", accent = p.secondary) { PermissionsBlock() }
+        HudPanel("08", "PANTALLA DE BLOQUEO", accent = p.secondary, trailing = "FONDO ANIMADO") { LockBlock(settings) }
+        HudPanel("09", "PERMISOS") { PermissionsBlock() }
         Text("ATMOS//OS LAUNCHER v0.1", style = mono(10.sp, 0.16f, p.muted))
     }
 }
@@ -306,6 +307,67 @@ private fun HologramBlock(settings: LauncherSettings) {
         }
         if (settings.hologramPath != null) CyberButton("QUITAR", Modifier.weight(1f), color = p.secondary) {
             scope.launch { HologramStore.clear(ctx); c.settings.setHologram(null) }
+        }
+    }
+}
+
+@Composable
+private fun LockBlock(settings: LauncherSettings) {
+    val c = LocalContainer.current
+    val ctx = LocalContext.current
+    val p = AtmosTheme.p
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            busy = true
+            scope.launch {
+                HologramStore.import(ctx, uri, slot = "lock")?.let { c.settings.setLockImage(it) }
+                busy = false
+            }
+        }
+    }
+    Text(
+        "Android no permite sustituir la pantalla de bloqueo: su reloj, PIN y notificaciones van siempre encima. " +
+            "Esto es un fondo animado propio (sustituye a Wallpaper Engine) con holograma a pantalla completa, " +
+            "tu música y tus notificaciones con la estética del tema.",
+        style = mono(10.sp, 0.06f, p.muted)
+    )
+    val bmp = rememberHologramBitmap(settings.lockImagePath ?: settings.hologramPath)
+    Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(220.dp).background(p.bg)) {
+        if (bmp != null) HologramBackdrop(bmp, alpha = { 1f }, modifier = Modifier.matchParentSize())
+        Text(
+            if (settings.lockImagePath == null) "USANDO LA IMAGEN DEL INICIO" else "IMAGEN PROPIA DEL BLOQUEO",
+            style = mono(10.sp, 0.14f, p.muted), modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+        )
+    }
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CyberButton(if (busy) "CARGANDO…" else "ELEGIR IMAGEN", Modifier.weight(1f)) {
+            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+        if (settings.lockImagePath != null) CyberButton("QUITAR", Modifier.weight(1f), color = p.secondary) {
+            scope.launch { HologramStore.clear(ctx, "lock"); c.settings.setLockImage(null) }
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    Text("MÚSICA EN EL BLOQUEO", style = mono(10.sp, 0.16f, p.muted))
+    Spacer(Modifier.height(6.dp))
+    Segmented(listOf(true, false), settings.lockShowMusic, { if (it) "MOSTRAR" else "OCULTAR" }) { v -> scope.launch { c.settings.setLockMusic(v) } }
+    Spacer(Modifier.height(14.dp))
+    Text("NOTIFICACIONES EN EL BLOQUEO", style = mono(10.sp, 0.16f, p.muted))
+    Spacer(Modifier.height(6.dp))
+    Segmented(listOf(0, 1, 2), settings.lockNotifMode, { listOf("COMPLETAS", "REMITENTE", "NINGUNA")[it] }) { v -> scope.launch { c.settings.setLockNotifMode(v) } }
+    Text(
+        "Consejo: para ver solo estas y no las de Android encima, en Ajustes del sistema › Pantalla de bloqueo › Notificaciones, elige no mostrarlas.",
+        style = mono(10.sp, 0.06f, p.muted), modifier = Modifier.padding(top = 8.dp)
+    )
+    CyberButton("APLICAR COMO FONDO DE BLOQUEO", Modifier.fillMaxWidth().padding(top = 12.dp), filled = true) {
+        val cn = android.content.ComponentName(ctx, com.atmos.launcher.wallpaper.AtmosWallpaperService::class.java)
+        val i = Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+            .putExtra(android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, cn)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try { ctx.startActivity(i) } catch (_: Throwable) {
+            Perms.open(ctx, android.app.WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
         }
     }
 }

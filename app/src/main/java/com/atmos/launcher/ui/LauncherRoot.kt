@@ -90,6 +90,7 @@ private fun LifecycleRefresh(container: Container) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_START) {
                 container.weather.refresh()
+                container.weather.requestRefresh()
                 val cn = ComponentName(ctx, AtmosNotificationListener::class.java)
                 if (NotificationHub.isAccessGranted(ctx)) {
                     MediaHub.attach(ctx.applicationContext, cn)

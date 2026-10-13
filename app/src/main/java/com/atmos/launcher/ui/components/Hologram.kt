@@ -26,7 +26,7 @@ object HologramStore {
      * Copia la imagen elegida a almacenamiento interno, reducida a 1080 px de ancho como máximo.
      * Así no dependemos del permiso de la galería y la decodificación posterior es barata.
      */
-    suspend fun import(ctx: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+    suspend fun import(ctx: Context, uri: Uri, slot: String = "hologram"): String? = withContext(Dispatchers.IO) {
         try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -36,7 +36,7 @@ object HologramStore {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
             } ?: return@withContext null
             val scaled = if (bmp.width > 1080) Bitmap.createScaledBitmap(bmp, 1080, bmp.height * 1080 / bmp.width, true) else bmp
-            val dir = File(ctx.filesDir, "hologram").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+            val dir = File(ctx.filesDir, slot).apply { mkdirs(); listFiles()?.forEach { it.delete() } }
             // Nombre con marca de tiempo: cambia la clave y fuerza a recargar la imagen nueva.
             val f = File(dir, "holo_${System.currentTimeMillis()}.png")
             f.outputStream().use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -44,8 +44,8 @@ object HologramStore {
         } catch (_: Throwable) { null }
     }
 
-    fun clear(ctx: Context) {
-        File(ctx.filesDir, "hologram").listFiles()?.forEach { it.delete() }
+    fun clear(ctx: Context, slot: String = "hologram") {
+        File(ctx.filesDir, slot).listFiles()?.forEach { it.delete() }
     }
 }
 

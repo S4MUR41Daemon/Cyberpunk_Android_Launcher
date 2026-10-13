@@ -32,7 +32,12 @@ data class LauncherSettings(
     val onboardingDone: Boolean = false,
     /** Imagen del holograma de fondo (copiada a almacenamiento interno) e intensidad 0..2. */
     val hologramPath: String? = null,
-    val hologramLevel: Int = 1
+    val hologramLevel: Int = 1,
+    /** Fondo animado de la pantalla de bloqueo: imagen propia, música y modo de notificaciones. */
+    val lockImagePath: String? = null,
+    val lockShowMusic: Boolean = true,
+    /** 0 = completas, 1 = solo remitente, 2 = ninguna. */
+    val lockNotifMode: Int = 1
 ) {
     companion object {
         val DEFAULT_MESSAGING = setOf("com.whatsapp", "com.whatsapp.w4b")
@@ -55,6 +60,9 @@ class SettingsStore(private val ctx: Context) {
     private val ONBOARD = booleanPreferencesKey("onboarding_done")
     private val HOLO = stringPreferencesKey("hologram_path")
     private val HOLO_LVL = androidx.datastore.preferences.core.intPreferencesKey("hologram_level")
+    private val LOCK_IMG = stringPreferencesKey("lock_image")
+    private val LOCK_MUSIC = booleanPreferencesKey("lock_music")
+    private val LOCK_NOTIF = androidx.datastore.preferences.core.intPreferencesKey("lock_notif")
 
     val settings: Flow<LauncherSettings> = ctx.store.data.map(::read)
 
@@ -69,7 +77,10 @@ class SettingsStore(private val ctx: Context) {
         messagingPackages = p[MSG] ?: LauncherSettings.DEFAULT_MESSAGING,
         onboardingDone = p[ONBOARD] ?: false,
         hologramPath = p[HOLO],
-        hologramLevel = p[HOLO_LVL] ?: 1
+        hologramLevel = p[HOLO_LVL] ?: 1,
+        lockImagePath = p[LOCK_IMG],
+        lockShowMusic = p[LOCK_MUSIC] ?: true,
+        lockNotifMode = p[LOCK_NOTIF] ?: 1
     )
 
     suspend fun setTheme(id: String) = ctx.store.edit { it[THEME] = id }
@@ -84,5 +95,10 @@ class SettingsStore(private val ctx: Context) {
         }
     }
     suspend fun setHologramLevel(l: Int) = ctx.store.edit { it[HOLO_LVL] = l }
+    suspend fun setLockImage(path: String?) {
+        ctx.store.edit { prefs -> if (path == null) prefs.remove(LOCK_IMG) else prefs[LOCK_IMG] = path }
+    }
+    suspend fun setLockMusic(v: Boolean) = ctx.store.edit { it[LOCK_MUSIC] = v }
+    suspend fun setLockNotifMode(m: Int) = ctx.store.edit { it[LOCK_NOTIF] = m }
     suspend fun setOnboardingDone() = ctx.store.edit { it[ONBOARD] = true }
 }

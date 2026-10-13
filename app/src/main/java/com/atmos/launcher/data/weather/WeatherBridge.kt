@@ -100,6 +100,11 @@ class WeatherBridge(private val ctx: Context, private val onThemeFromAtmos: (Str
         } catch (_: Throwable) {}
     }
 
+    /** Pide a ATMOS un sync en segundo plano; ATMOS solo lo hace si su caché tiene > 30 min. */
+    fun requestRefresh() {
+        scope.launch { try { ctx.contentResolver.call(uri, "requestRefresh", null, null) } catch (_: Throwable) {} }
+    }
+
     suspend fun theme(): String? = withContext(Dispatchers.IO) {
         try { ctx.contentResolver.call(uri, "getTheme", null, null)?.getString("theme") } catch (_: Throwable) { null }
     }
