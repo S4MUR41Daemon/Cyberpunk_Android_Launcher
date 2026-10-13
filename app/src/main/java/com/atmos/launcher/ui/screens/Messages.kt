@@ -81,7 +81,7 @@ fun MessagesScreen(settings: LauncherSettings, nav: NavHostController) {
     val convs = remember(all, settings.messagingPackages) { all.filter { it.pkg in settings.messagingPackages } }
     val shown = remember(convs, tab, unread) {
         when (tab) {
-            MsgTab.TODOS -> convs
+            MsgTab.TODOS -> convs.take(15) // ya vienen ordenadas por el último mensaje
             MsgTab.NUEVOS -> convs.filter { (unread[it.convKey] ?: 0) > 0 }
             MsgTab.GRUPOS -> convs.filter { it.isGroup }
         }
