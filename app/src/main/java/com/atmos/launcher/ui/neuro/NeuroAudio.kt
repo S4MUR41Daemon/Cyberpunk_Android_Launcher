@@ -54,6 +54,8 @@ import com.atmos.launcher.ui.theme.anton
 import com.atmos.launcher.ui.theme.mono
 import com.atmos.launcher.ui.theme.raj
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 enum class NTab(val label: String, val glyph: String) {
@@ -174,7 +176,12 @@ private fun Loading(text: String = "// CARGANDO…") {
 
 @Composable
 private fun ErrorLine(e: Throwable) {
-    val msg = if (e is SpotifyAuthExpired) "SESIÓN CADUCADA · VUELVE A ENTRAR" else "SIN RESPUESTA DE SPOTIFY"
+    val msg = when (e) {
+        is SpotifyAuthExpired -> "SESIÓN CADUCADA · VUELVE A ENTRAR"
+        is SpotifyHttpError -> "SPOTIFY ${e.code} · ${e.reason.uppercase()}"
+        is java.io.IOException -> "SIN CONEXIÓN CON SPOTIFY"
+        else -> "RESPUESTA INESPERADA · ${e.javaClass.simpleName.uppercase()}"
+    }
     Text("// $msg", style = mono(11.sp, 0.14f, AtmosTheme.p.warn), modifier = Modifier.padding(20.dp))
 }
 
@@ -387,33 +394,76 @@ private fun QueuePage(hasToken: Boolean, onBack: () -> Unit) {
 // ───────────────────────────── BIBLIOTECA ─────────────────────────────
 
 private enum class LibKind(val label: String) { PLAYLISTS("PLAYLISTS"), ALBUMS("ÁLBUMES"), ARTISTS("ARTISTAS") }
+private enum class LibSort(val label: String) { RECIENTES("RECIENTES"), AZ("A–Z") }
+
+/** Recoge un Flow paginado (lo cargado hasta ahora) como estado de Compose. */
+@Composable
+private fun <T> rememberPaged(vararg keys: Any?, flow: SpotifyApi.() -> kotlinx.coroutines.flow.Flow<Partial<T>>): State<Result<Partial<T>>?> {
+    val c = LocalContainer.current
+    return produceState<Result<Partial<T>>?>(null, *keys) {
+        try { c.spotify.flow().collect { value = Result.success(it) } } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            value = Result.failure(e)
+        }
+    }
+}
+
+@Composable
+private fun FilterField(value: String, hint: String, onChange: (String) -> Unit) {
+    val p = AtmosTheme.p
+    Row(
+        Modifier.fillMaxWidth().height(42.dp).clip(CutShape(br = 10.dp)).background(p.panel)
+            .border(1.dp, p.primary.copy(alpha = 0.35f), CutShape(br = 10.dp)).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(">", style = mono(14.sp, 0f, p.primary))
+        Spacer(Modifier.width(8.dp))
+        BasicTextField(
+            value, onChange, singleLine = true, modifier = Modifier.weight(1f),
+            textStyle = raj(15.sp, FontWeight.SemiBold, 0.14f, p.text), cursorBrush = SolidColor(p.primary),
+            decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, style = raj(15.sp, FontWeight.SemiBold, 0.14f, p.muted)); inner() } }
+        )
+        if (value.isNotEmpty()) Text("✕", style = mono(12.sp, 0f, p.muted), modifier = Modifier.clickable { onChange("") }.padding(6.dp))
+    }
+}
 
 @Composable
 private fun LibraryPage(open: (NPage) -> Unit) {
+    val p = AtmosTheme.p
     var kind by rememberSaveable { mutableStateOf(LibKind.PLAYLISTS) }
-    val data by rememberApi(kind) {
+    var sort by rememberSaveable { mutableStateOf(LibSort.RECIENTES) }
+    var filter by rememberSaveable { mutableStateOf("") }
+    val data by rememberPaged(kind) {
         when (kind) {
-            LibKind.PLAYLISTS -> playlists().map { Cart(it.name, "TRK %03d // %s".format(it.tracks?.total ?: 0, (it.owner?.name ?: "").uppercase()), it.images.best(), NPage.Collection(it.id, it.uri, it.name, it.images.best(), false)) }
-            LibKind.ALBUMS -> savedAlbums().map { Cart(it.name, "TRK %03d // %s".format(it.totalTracks, it.releaseDate.take(4)), it.images.best(), NPage.Collection(it.id, it.uri, it.name, it.images.best(), true)) }
-            LibKind.ARTISTS -> followedArtists().map { Cart(it.name, "%s SEGUIDORES".format(compact(it.followers?.total ?: 0)), it.images.best(), NPage.Artist(it.id)) }
+            LibKind.PLAYLISTS -> playlists().map { pt -> Partial(pt.items.map { Cart(it.name, "TRK %03d // %s".format(it.tracks?.total ?: 0, (it.owner?.name ?: "").uppercase()), it.images.best(), NPage.Collection(it.id, it.uri, it.name, it.images.best(), false)) }, pt.total, pt.done) }
+            LibKind.ALBUMS -> savedAlbums().map { pt -> Partial(pt.items.map { Cart(it.name, "TRK %03d // %s".format(it.totalTracks, it.releaseDate.take(4)), it.images.best(), NPage.Collection(it.id, it.uri, it.name, it.images.best(), true)) }, pt.total, pt.done) }
+            LibKind.ARTISTS -> followedArtists().map { pt -> Partial(pt.items.map { Cart(it.name, "%s SEGUIDORES".format(compact(it.followers?.total ?: 0)), it.images.best(), NPage.Artist(it.id)) }, pt.total, pt.done) }
         }
+    }
+    val all = data?.getOrNull()
+    val shown = remember(all, filter, sort) {
+        val q = filter.trim().lowercase()
+        val l = all?.items.orEmpty().filter { q.isEmpty() || it.title.lowercase().contains(q) }
+        if (sort == LibSort.AZ) l.sortedBy { it.title.lowercase() } else l
     }
     LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Column {
-                NHead("BIBLIOTECA", "TU COLECCIÓN", trailing = data?.getOrNull()?.size?.let { "$it" })
-                BigTitle("Biblioteca", modifier = Modifier.padding(top = 10.dp))
-                Box(Modifier.padding(top = 12.dp)) { Segmented(LibKind.entries, kind, { it.label }) { kind = it } }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NHead("BIBLIOTECA", "TU COLECCIÓN", trailing = all?.let { if (it.done) "${it.total}" else "${it.items.size}/${it.total}…" })
+                BigTitle("Biblioteca")
+                Segmented(LibKind.entries, kind, { it.label }) { kind = it; filter = "" }
+                FilterField(filter, "FILTRAR_") { filter = it }
+                Segmented(LibSort.entries, sort, { it.label }) { sort = it }
             }
         }
         val r = data
         when {
             r == null -> item(span = { GridItemSpan(maxLineSpan) }) { Loading() }
             r.isFailure -> item(span = { GridItemSpan(maxLineSpan) }) { ErrorLine(r.exceptionOrNull()!!) }
-            else -> items(r.getOrThrow(), key = { it.title + it.target.hashCode() }) { cart ->
-                val n = r.getOrThrow().indexOf(cart) + 1
-                Cartridge(n, cart) { open(cart.target) }
+            shown.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) { Loading(if (filter.isNotEmpty()) "// SIN COINCIDENCIAS" else "// VACÍO") }
+            else -> items(shown, key = { it.title + it.target.hashCode() }) { cart ->
+                Cartridge(all!!.items.indexOf(cart) + 1, cart) { open(cart.target) }
             }
         }
     }
@@ -440,40 +490,123 @@ private fun Cartridge(n: Int, cart: Cart, onClick: () -> Unit) {
     }
 }
 
+/** Criterios de orden de Spotify. Tocar el activo invierte el sentido. */
+private enum class TrackSort(val label: String) {
+    PERSONAL("PERSONALIZADO"), TITULO("TÍTULO"), ARTISTA("ARTISTA"), ALBUM("ÁLBUM"), FECHA("AÑADIDA"), DURACION("DURACIÓN")
+}
+
+private fun hm(ms: Long): String {
+    val m = ms / 60_000
+    return if (m >= 60) "${m / 60}H ${m % 60}M" else "${m}M"
+}
+
 @Composable
 private fun CollectionPage(page: NPage.Collection, open: (NPage) -> Unit, onBack: () -> Unit) {
     val p = AtmosTheme.p
-    val tracks by rememberApi(page.id) { if (page.isAlbum) albumTracks(page.id) else playlistTracks(page.id) }
+    val data by rememberPaged(page.id) { if (page.isAlbum) albumEntries(page.id) else playlistEntries(page.id) }
+    var filter by rememberSaveable(page.id) { mutableStateOf("") }
+    var sort by rememberSaveable(page.id) { mutableStateOf(TrackSort.PERSONAL) }
+    var desc by rememberSaveable(page.id) { mutableStateOf(false) }
+    var menu by remember { mutableStateOf<SpTrack?>(null) }
+    val part = data?.getOrNull()
+    val entries = part?.items.orEmpty()
+    val shown = remember(entries, filter, sort, desc) {
+        val q = filter.trim().lowercase()
+        var l = if (q.isEmpty()) entries else entries.filter { e ->
+            e.track.name.lowercase().contains(q) || e.track.artists.any { it.name.lowercase().contains(q) } ||
+                (e.track.album?.name?.lowercase()?.contains(q) == true)
+        }
+        l = when (sort) {
+            TrackSort.PERSONAL -> l
+            TrackSort.TITULO -> l.sortedBy { it.track.name.lowercase() }
+            TrackSort.ARTISTA -> l.sortedBy { it.track.artists.firstOrNull()?.name?.lowercase() ?: "" }
+            TrackSort.ALBUM -> l.sortedBy { it.track.album?.name?.lowercase() ?: "" }
+            TrackSort.FECHA -> l.sortedBy { it.addedAt }
+            TrackSort.DURACION -> l.sortedBy { it.track.durationMs }
+        }
+        if (desc) l.reversed() else l
+    }
+    val totalMs = remember(entries) { entries.sumOf { it.track.durationMs } }
+
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            Box(Modifier.fillMaxWidth().height(260.dp)) {
+            Box(Modifier.fillMaxWidth().height(240.dp)) {
                 ThresholdCover(page.image, Modifier.matchParentSize(), glitchKey = page.id)
                 Text("‹", style = raj(22.sp, color = p.primary),
                     modifier = Modifier.padding(8.dp).background(p.bg.copy(alpha = 0.7f)).clickable(onClick = onBack).padding(horizontal = 10.dp))
             }
             Tape()
-            Column(Modifier.padding(18.dp)) {
-                NHead(if (page.isAlbum) "ÁLBUM" else "PLAYLIST", "${tracks?.getOrNull()?.size ?: "…"} PISTAS")
-                BigTitle(page.name, modifier = Modifier.padding(top = 10.dp))
-                CyberButton("▶ REPRODUCIR", Modifier.fillMaxWidth().padding(top = 12.dp), filled = true) { SpotifyRemote.play(page.uri) }
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NHead(
+                    if (page.isAlbum) "ÁLBUM" else "PLAYLIST",
+                    when {
+                        part == null -> "CARGANDO…"
+                        !part.done -> "CARGANDO ${entries.size}/${part.total}…"
+                        else -> "TRK %03d // %s".format(entries.size, hm(totalMs))
+                    }
+                )
+                BigTitle(page.name)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CyberButton("▶ REPRODUCIR", Modifier.weight(1f), filled = true) { SpotifyRemote.play(page.uri) }
+                    CyberButton("⤮ ALEATORIO", Modifier.weight(1f)) { SpotifyRemote.shufflePlay(page.uri) }
+                }
+                FilterField(filter, "FILTRAR EN LA LISTA_") { filter = it }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(TrackSort.entries) { o ->
+                        val on = o == sort
+                        Box(
+                            Modifier.height(32.dp).clip(CutShape(br = 8.dp)).background(if (on) p.primary else Color.Transparent)
+                                .border(1.dp, p.primary.copy(alpha = 0.3f), CutShape(br = 8.dp))
+                                .clickable { if (on && o != TrackSort.PERSONAL) desc = !desc else { sort = o; desc = false } }
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(o.label + if (on && o != TrackSort.PERSONAL) (if (desc) " ↓" else " ↑") else "",
+                                style = raj(12.sp, tracking = 0.16f, color = if (on) p.onPrimary else p.text))
+                        }
+                    }
+                }
+                if (filter.isNotEmpty()) Text("${shown.size} DE ${entries.size}", style = mono(10.sp, 0.14f, p.muted))
             }
         }
-        val r = tracks
+        val r = data
         when {
             r == null -> item { Loading() }
             r.isFailure -> item { ErrorLine(r.exceptionOrNull()!!) }
-            else -> itemsIndexed(r.getOrThrow()) { i, t ->
-                Box(Modifier.padding(horizontal = 18.dp)) { TrackRow(i + 1, t, showCover = !page.isAlbum) { SpotifyRemote.playAt(page.uri, i) } }
+            else -> items(shown, key = { it.index }) { e ->
+                Box(Modifier.padding(horizontal = 18.dp)) {
+                    TrackRow(e.index + 1, e.track, showCover = !page.isAlbum, onLongClick = { menu = e.track }) {
+                        SpotifyRemote.playAt(page.uri, e.index)
+                    }
+                }
             }
         }
-        item { Spacer(Modifier.height(20.dp)) }
+        item { Spacer(Modifier.height(24.dp)) }
     }
+    menu?.let { t -> TrackMenu(t, open) { menu = null } }
+}
+
+/** Pulsación larga en una pista: lo mismo que el menú «⋯» de Spotify. */
+@Composable
+private fun TrackMenu(t: SpTrack, open: (NPage) -> Unit, onDismiss: () -> Unit) {
+    val artistId = t.artists.firstOrNull()?.id
+    val album = t.album
+    HudMenu(
+        t.name,
+        buildList {
+            add("AÑADIR A LA COLA" to { SpotifyRemote.enqueue(t.uri) })
+            add("♥ GUARDAR EN TU BIBLIOTECA" to { SpotifyRemote.save(t.uri) })
+            if (artistId != null) add("IR AL ARTISTA" to { open(NPage.Artist(artistId)) })
+            if (album != null && album.id.isNotEmpty()) add("IR AL ÁLBUM" to { open(NPage.Collection(album.id, album.uri, album.name, album.images.best(), true)) })
+        },
+        onDismiss = onDismiss
+    )
 }
 
 @Composable
-private fun TrackRow(n: Int?, t: SpTrack, showCover: Boolean, onClick: () -> Unit) {
+private fun TrackRow(n: Int?, t: SpTrack, showCover: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = AtmosTheme.p
-    Pressable(Modifier.fillMaxWidth().heightIn(min = 58.dp), shape = CutShape(br = 8.dp), onClick = onClick) { pressed ->
+    Pressable(Modifier.fillMaxWidth().heightIn(min = 58.dp), shape = CutShape(br = 8.dp), onLongClick = onLongClick, onClick = onClick) { pressed ->
         val fg = if (pressed) p.onPrimary else p.text
         Row(
             Modifier.fillMaxWidth().drawBehind {
@@ -481,7 +614,7 @@ private fun TrackRow(n: Int?, t: SpTrack, showCover: Boolean, onClick: () -> Uni
             }.padding(vertical = 6.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (n != null) Text("%02d".format(n), style = mono(11.sp, 0f, if (pressed) fg else p.muted), modifier = Modifier.width(26.dp))
+            if (n != null) Text("%02d".format(n), style = mono(11.sp, 0f, if (pressed) fg else p.muted), modifier = Modifier.width(34.dp))
             if (showCover) { ThresholdCover(t.album?.images.best(64), Modifier.size(44.dp), ghostShift = 2.dp); Spacer(Modifier.width(10.dp)) }
             Column(Modifier.weight(1f)) {
                 Text(t.name.uppercase(), style = raj(16.sp, tracking = 0.1f, color = fg), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -504,8 +637,13 @@ private fun SearchPage(open: (NPage) -> Unit) {
     var q by rememberSaveable { mutableStateOf("") }
     var genre by rememberSaveable { mutableStateOf<String?>(null) }
     var res by remember { mutableStateOf<Result<SearchResult>?>(null) }
-    LaunchedEffect(q, genre) {
-        val query = listOfNotNull(q.trim().takeIf { it.isNotEmpty() }, genre?.let { "genre:\"${it.lowercase()}\"" }).joinToString(" ")
+    var more by remember { mutableStateOf<List<SpTrack>>(emptyList()) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf<SpTrack?>(null) }
+    val scope = rememberCoroutineScope()
+    val query = listOfNotNull(q.trim().takeIf { it.isNotEmpty() }, genre?.let { "genre:\"${it.lowercase()}\"" }).joinToString(" ")
+    LaunchedEffect(query) {
+        more = emptyList()
         if (query.isEmpty()) { res = null; return@LaunchedEffect }
         delay(350)
         res = runCatching { c.spotify.search(query) }
@@ -560,11 +698,25 @@ private fun SearchPage(open: (NPage) -> Unit) {
                     }
                 }
                 item { Box(Modifier.padding(top = 16.dp)) { NHead(null, if (genre != null) "genre:\"${genre!!.lowercase()}\"" else "PISTAS", trailing = "${tracks.size}") } }
-                items(tracks, key = { it.uri }) { t -> TrackRow(null, t, showCover = true) { SpotifyRemote.play(t.uri) } }
+                val allTracks = (tracks + more).distinctBy { it.uri }
+                items(allTracks, key = { it.uri }) { t -> TrackRow(null, t, showCover = true, onLongClick = { menu = t }) { SpotifyRemote.play(t.uri) } }
+                val total = r.getOrThrow().tracks?.total ?: 0
+                if (allTracks.isNotEmpty() && allTracks.size < total) item {
+                    CyberButton(if (loadingMore) "CARGANDO…" else "CARGAR MÁS  [${allTracks.size}/${total}]", Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        if (!loadingMore) {
+                            loadingMore = true
+                            scope.launch {
+                                runCatching { c.spotify.search(query, offset = allTracks.size) }.getOrNull()?.tracks?.items?.let { more = more + it }
+                                loadingMore = false
+                            }
+                        }
+                    }
+                }
                 if (tracks.isEmpty() && artists.isEmpty()) item { Text("SIN COINCIDENCIAS // 0 PISTAS", style = mono(11.sp, 0.16f, p.muted), modifier = Modifier.padding(vertical = 24.dp)) }
             }
         }
     }
+    menu?.let { t -> TrackMenu(t, open) { menu = null } }
 }
 
 // ───────────────────────────── ARTISTA (expediente) ─────────────────────────────

@@ -187,6 +187,9 @@ object SpotifyRemote {
     fun toggleRepeat() = withRemote { it.playerApi.toggleRepeat() }
     fun play(uri: String) = withRemote { it.playerApi.play(uri) }
     fun playAt(contextUri: String, index: Int) = withRemote { it.playerApi.skipToIndex(contextUri, index) }
+    fun shufflePlay(uri: String) = withRemote { r -> r.playerApi.setShuffle(true); r.playerApi.play(uri) }
+    fun enqueue(uri: String) = withRemote { it.playerApi.queue(uri) }
+    fun save(uri: String) = withRemote { it.userApi.addToLibrary(uri) }
 
     fun toggleLike() = withRemote { r ->
         val uri = _player.value?.uri ?: return@withRemote
