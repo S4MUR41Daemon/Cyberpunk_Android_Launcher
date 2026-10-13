@@ -145,8 +145,18 @@ fun Pressable(
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val p = AtmosTheme.p
+    // «Golpe» seco al pulsar: se hunde un 4 % y salta 2 dp; solo propiedades de capa, sin recomponer.
+    val press by androidx.compose.animation.core.animateFloatAsState(
+        if (pressed) 1f else 0f, androidx.compose.animation.core.tween(if (pressed) 70 else 160), label = "press"
+    )
+    val jolt = with(LocalDensity.current) { 2.dp.toPx() }
     Box(
         modifier
+            .graphicsLayer {
+                val s = 1f - 0.04f * press
+                scaleX = s; scaleY = s
+                translationX = jolt * press
+            }
             .clip(shape)
             .background(if (pressed) p.primary else idle)
             .combinedClickable(src, indication = null, onLongClick = onLongClick, onClick = onClick)

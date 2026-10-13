@@ -8,6 +8,7 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="com.atmos.weather.permission.SHARE" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -23,6 +24,7 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <package android:name="com.atmos.weather" />
+        <package android:name="com.spotify.music" />
         <provider android:authorities="com.atmos.weather.data" />
     </queries>
 

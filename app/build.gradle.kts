@@ -36,8 +36,12 @@ android {
         applicationId = "com.atmos.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+        // Redirección del login de Spotify: atmos-launcher://spotify-callback
+        manifestPlaceholders["redirectSchemeName"] = "atmos-launcher"
+        manifestPlaceholders["redirectHostName"] = "spotify-callback"
+        manifestPlaceholders["redirectPathPattern"] = ".*"
     }
 
     signingConfigs {
@@ -94,6 +98,13 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.profileinstaller)
+
+    // NEURO//AUDIO: SDK oficial de Spotify (App Remote = control de la app oficial; auth = login) + Web API.
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    implementation(libs.spotify.auth)
+    implementation(libs.gson)
+    implementation(libs.okhttp)
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
 }

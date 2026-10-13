@@ -63,7 +63,14 @@ object Palettes {
         bg = Color(0xFF030805), panel = Color(0xFF08110B), onPrimary = Color(0xFF03140A),
         text = Color(0xFFE9FFEC), muted = Color(0xFF7FA088), warn = Color(0xFFFF3B3B)
     )
-    val all = listOf(NIGHT_CITY, EVA_001, NOCHE_NEON, GREEN_LANTERN)
+    /** Hueso, sangre y brasa: pensada para metal, hardcore y darkwave. */
+    val HELLFIRE = Palette(
+        "hellfire", "HELLFIRE",
+        primary = Color(0xFFE9E2D3), secondary = Color(0xFFB3001B), tertiary = Color(0xFFFF6A2B),
+        bg = Color(0xFF070606), panel = Color(0xFF110E0E), onPrimary = Color(0xFF0A0808),
+        text = Color(0xFFEDE7DA), muted = Color(0xFF8A837A), warn = Color(0xFFFF2A2A)
+    )
+    val all = listOf(NIGHT_CITY, EVA_001, NOCHE_NEON, GREEN_LANTERN, HELLFIRE)
     fun byId(id: String?) = all.firstOrNull { it.id == id } ?: NIGHT_CITY
 }
 
@@ -99,6 +106,11 @@ val Rajdhani = FontFamily(
     Font(R.font.rajdhani_bold, FontWeight.Bold)
 )
 val ShareTechMono = FontFamily(Font(R.font.share_tech_mono, FontWeight.Normal))
+/** Anton: grotesca ultracondensada para los títulos gigantes de NEURO//AUDIO. */
+val Anton = FontFamily(Font(R.font.anton_regular, FontWeight.Normal))
+
+fun anton(size: TextUnit, tracking: Float = 0.01f, color: Color = Color.Unspecified) =
+    TextStyle(fontFamily = Anton, fontSize = size, letterSpacing = tracking.em, color = color, lineHeight = size * 0.9f)
 
 fun raj(size: TextUnit, weight: FontWeight = FontWeight.Bold, tracking: Float = 0.1f, color: Color = Color.Unspecified) =
     TextStyle(fontFamily = Rajdhani, fontWeight = weight, fontSize = size, letterSpacing = tracking.em, color = color)

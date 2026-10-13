@@ -152,8 +152,8 @@ private fun MainNav(settings: LauncherSettings, homePressed: SharedFlow<Unit>) {
             composable(Routes.PICKER) { e ->
                 DrawerScreen(settings, nav, pickSlot = e.arguments?.getString("slot")?.toIntOrNull())
             }
-            composable(Routes.MUSIC) { MusicScreen(nav) }
-            composable(Routes.PLAYER) { PlayerScreen(nav) }
+            composable(Routes.MUSIC) { com.atmos.launcher.ui.neuro.NeuroAudioScreen(nav) }
+            composable(Routes.PLAYER) { com.atmos.launcher.ui.neuro.NeuroAudioScreen(nav) }
             composable(Routes.MESSAGES) { MessagesScreen(settings, nav) }
             composable(Routes.CHAT) { e -> ChatScreen(Uri.decode(e.arguments?.getString("key").orEmpty()), nav) }
             composable(Routes.WEATHER) { WeatherScreen(nav) }

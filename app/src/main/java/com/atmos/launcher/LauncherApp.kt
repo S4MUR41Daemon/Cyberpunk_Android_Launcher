@@ -29,6 +29,8 @@ class Container(app: Application) {
     val settings = SettingsStore(app)
     val apps = AppsRepository(app)
     val icons = IconCache(app, apps)
+    val spotifyAuth = com.atmos.launcher.data.spotify.SpotifyAuth(app)
+    val spotify = com.atmos.launcher.data.spotify.SpotifyApi(spotifyAuth)
 
     /** Si el tema cambia en ATMOS, el launcher lo adopta (y al revés en [setTheme]). */
     val weather = WeatherBridge(app) { atmosTheme ->
