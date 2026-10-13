@@ -35,9 +35,10 @@ data class LauncherSettings(
     val hologramLevel: Int = 1,
     /** Fondo animado de la pantalla de bloqueo: imagen propia, música y modo de notificaciones. */
     val lockImagePath: String? = null,
-    val lockShowMusic: Boolean = true,
+    /** Por defecto apagadas: en el bloqueo mandan el reproductor y las notificaciones del sistema (tienen botones). */
+    val lockShowMusic: Boolean = false,
     /** 0 = completas, 1 = solo remitente, 2 = ninguna. */
-    val lockNotifMode: Int = 1
+    val lockNotifMode: Int = 2
 ) {
     companion object {
         val DEFAULT_MESSAGING = setOf("com.whatsapp", "com.whatsapp.w4b")
@@ -61,8 +62,8 @@ class SettingsStore(private val ctx: Context) {
     private val HOLO = stringPreferencesKey("hologram_path")
     private val HOLO_LVL = androidx.datastore.preferences.core.intPreferencesKey("hologram_level")
     private val LOCK_IMG = stringPreferencesKey("lock_image")
-    private val LOCK_MUSIC = booleanPreferencesKey("lock_music")
-    private val LOCK_NOTIF = androidx.datastore.preferences.core.intPreferencesKey("lock_notif")
+    private val LOCK_MUSIC = booleanPreferencesKey("lock_music_v2")
+    private val LOCK_NOTIF = androidx.datastore.preferences.core.intPreferencesKey("lock_notif_v2")
 
     val settings: Flow<LauncherSettings> = ctx.store.data.map(::read)
 
@@ -79,8 +80,8 @@ class SettingsStore(private val ctx: Context) {
         hologramPath = p[HOLO],
         hologramLevel = p[HOLO_LVL] ?: 1,
         lockImagePath = p[LOCK_IMG],
-        lockShowMusic = p[LOCK_MUSIC] ?: true,
-        lockNotifMode = p[LOCK_NOTIF] ?: 1
+        lockShowMusic = p[LOCK_MUSIC] ?: false,
+        lockNotifMode = p[LOCK_NOTIF] ?: 2
     )
 
     suspend fun setTheme(id: String) = ctx.store.edit { it[THEME] = id }

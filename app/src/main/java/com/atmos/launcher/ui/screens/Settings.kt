@@ -358,7 +358,7 @@ private fun LockBlock(settings: LauncherSettings) {
     Spacer(Modifier.height(6.dp))
     Segmented(listOf(0, 1, 2), settings.lockNotifMode, { listOf("COMPLETAS", "REMITENTE", "NINGUNA")[it] }) { v -> scope.launch { c.settings.setLockNotifMode(v) } }
     Text(
-        "Consejo: para ver solo estas y no las de Android encima, en Ajustes del sistema › Pantalla de bloqueo › Notificaciones, elige no mostrarlas.",
+        "Recomendado: NINGUNA y música OCULTA. En el bloqueo, el fondo no puede recibir toques, así que el reproductor y las notificaciones del sistema (con botones) son los útiles.",
         style = mono(10.sp, 0.06f, p.muted), modifier = Modifier.padding(top = 8.dp)
     )
     CyberButton("APLICAR COMO FONDO DE BLOQUEO", Modifier.fillMaxWidth().padding(top = 12.dp), filled = true) {
