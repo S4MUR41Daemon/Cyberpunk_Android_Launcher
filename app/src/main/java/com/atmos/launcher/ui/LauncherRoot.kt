@@ -102,11 +102,13 @@ private fun LifecycleRefresh(container: Container) {
 private fun MainNav(settings: LauncherSettings, homePressed: SharedFlow<Unit>) {
     val nav = rememberNavController()
     var shade by rememberSaveable { mutableStateOf(false) }
+    var homeTick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         homePressed.collect {
             shade = false
             nav.popBackStack(Routes.HOME, inclusive = false)
+            homeTick++
         }
     }
 
@@ -120,7 +122,7 @@ private fun MainNav(settings: LauncherSettings, homePressed: SharedFlow<Unit>) {
         ) {
             composable(Routes.HOME) {
                 BackHandler(enabled = true) { /* el inicio no tiene «atrás» */ }
-                HomeScreen(settings, nav, onOpenShade = { shade = true })
+                HomeScreen(settings, nav, homeTick, onOpenShade = { shade = true })
             }
             composable(Routes.DRAWER) { DrawerScreen(settings, nav, pickSlot = null) }
             composable(Routes.PICKER) { e ->

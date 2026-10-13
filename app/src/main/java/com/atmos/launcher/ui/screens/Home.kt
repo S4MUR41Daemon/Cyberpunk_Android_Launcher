@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -56,7 +58,7 @@ import kotlin.math.abs
 private val MUSIC_PKGS = setOf("com.spotify.music", "com.google.android.apps.youtube.music", "deezer.android.app", "com.soundcloud.android", "com.apple.android.music")
 
 @Composable
-fun HomeScreen(settings: LauncherSettings, nav: NavHostController, onOpenShade: () -> Unit) {
+fun HomeScreen(settings: LauncherSettings, nav: NavHostController, homeTick: Int, onOpenShade: () -> Unit) {
     val c = LocalContainer.current
     val ctx = LocalContext.current
     val p = AtmosTheme.p
@@ -93,60 +95,109 @@ fun HomeScreen(settings: LauncherSettings, nav: NavHostController, onOpenShade: 
         }
     }
 
+    val holo = rememberHologramBitmap(settings.hologramPath)
+    val holoPages = if (holo != null) 1 else 0
+    val appPages = remember(apps) { apps.chunked(12) }
+    val homeIndex = holoPages
+    val pager = rememberPagerState(initialPage = homeIndex) { holoPages + 1 + appPages.size }
+    var appMenu by remember { mutableStateOf<AppEntry?>(null) }
+    val glass = holo != null
+
+    // Botón de inicio o activar/quitar holograma → volver a la página principal.
+    LaunchedEffect(homeTick, homeIndex) { if (pager.currentPage != homeIndex) pager.scrollToPage(homeIndex) }
+
     Box(Modifier.fillMaxSize()) {
-    HologramBackdrop(settings.hologramPath, settings.hologramLevel, Modifier.matchParentSize())
-    Column(
-        Modifier
-            .fillMaxSize()
-            .glitchEnter()
-            .nestedScroll(pull)
-            .verticalScroll(rememberScrollState())
-            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 18.dp)
-    ) {
-        TopStrip(linked, weather, onTap = onOpenShade, onLong = { nav.go(Routes.SETTINGS) })
-
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1.15f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                ScanlineText(clock.time, raj(70.sp, tracking = 0f), p.primary)
-                Text(clock.date, style = raj(13.sp, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, tracking = 0.2f, color = p.secondary), maxLines = 1)
-            }
-            WeatherModule(weather, Modifier.weight(1f).fillMaxHeight()) {
-                if (weather.data != null) nav.go(Routes.WEATHER) else c.weather.openAtmos()
-            }
+        if (holo != null) {
+            val rest = hologramRestAlpha(settings.hologramLevel)
+            HologramBackdrop(holo, alpha = {
+                // Posición continua del pager: 0 = página holograma, 1 = inicio, >1 = módulos.
+                val pos = pager.currentPage + pager.currentPageOffsetFraction
+                if (pos <= 1f) 1f + (rest - 1f) * pos.coerceIn(0f, 1f)
+                else rest + (rest * 0.45f - rest) * (pos - 1f).coerceIn(0f, 1f)
+            }, modifier = Modifier.matchParentSize())
         }
 
-        media?.let { m ->
-            Spacer(Modifier.height(18.dp))
-            MiniPlayer(m, onOpen = { nav.go(Routes.PLAYER) })
-        }
+        HorizontalPager(pager, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { it }) { page ->
+            when {
+                page < homeIndex -> HoloPage(clock.time, clock.date) { scope.launch { pager.animateScrollToPage(homeIndex) } }
+                page == homeIndex -> Column(
+                    Modifier
+                        .fillMaxSize()
+                        .glitchEnter()
+                        .nestedScroll(pull)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 40.dp)
+                ) {
+                    TopStrip(linked, weather, onTap = onOpenShade, onLong = { nav.go(Routes.SETTINGS) })
 
-        Spacer(Modifier.height(22.dp))
-        BlockLabel("02", if (settings.homeVariant == HomeVariant.MODULOS) "MÓDULOS" else "ACCESO RÁPIDO")
-        Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1.15f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                            ScanlineText(clock.time, raj(70.sp, tracking = 0f), p.primary)
+                            Text(clock.date, style = raj(13.sp, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, tracking = 0.2f, color = p.secondary), maxLines = 1)
+                        }
+                        WeatherModule(weather, glass, Modifier.weight(1f).fillMaxHeight()) {
+                            if (weather.data != null) nav.go(Routes.WEATHER) else c.weather.openAtmos()
+                        }
+                    }
 
-        when (settings.homeVariant) {
-            HomeVariant.MODULOS -> SimpleGrid(3, 8.dp) {
-                favs.forEachIndexed { i, a ->
-                    if (a == null) EmptyTile { nav.go(Routes.picker(i)) }
-                    else AppTile(a, settings, media, badges[a.packageName] ?: 0, onClick = { open(a) }, onLong = { menuSlot = i })
+                    media?.let { m ->
+                        Spacer(Modifier.height(18.dp))
+                        MiniPlayer(m, glass, onOpen = { nav.go(Routes.PLAYER) })
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+                    BlockLabel("02", if (settings.homeVariant == HomeVariant.MODULOS) "FAVORITOS" else "ACCESO RÁPIDO")
+                    Spacer(Modifier.height(10.dp))
+
+                    when (settings.homeVariant) {
+                        HomeVariant.MODULOS -> SimpleGrid(3, 10.dp) {
+                            favs.forEachIndexed { i, a ->
+                                if (a == null) EmptyTile { nav.go(Routes.picker(i)) }
+                                else AppTile(a, settings, media, badges[a.packageName] ?: 0, glass, onClick = { open(a) }, onLong = { menuSlot = i })
+                            }
+                        }
+                        HomeVariant.LISTA -> Column {
+                            favs.forEachIndexed { i, a ->
+                                if (a == null) return@forEachIndexed
+                                val (status, color) = tileStatus(a, settings, media, badges[a.packageName] ?: 0)
+                                ActionRow(
+                                    "%02d".format(i + 1), a.upper, a.category, status, color,
+                                    onClick = { open(a) }, onLongClick = { menuSlot = i }
+                                ) { AppIcon(a, settings.tintedIcons, 34.dp) }
+                                Box(Modifier.fillMaxWidth().height(1.dp).background(p.text.copy(alpha = 0.07f)))
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+                    CyberButton("⌕ BUSCAR EN ${apps.size} APPS", Modifier.fillMaxWidth(), height = 48.dp) { nav.go(Routes.DRAWER) }
+                }
+                else -> {
+                    val i = page - homeIndex - 1
+                    AppsPage(appPages.getOrElse(i) { emptyList() }, i, appPages.size, settings, media, badges, glass,
+                        onOpen = { open(it) }, onLong = { appMenu = it })
                 }
             }
-            HomeVariant.LISTA -> Column {
-                favs.forEachIndexed { i, a ->
-                    if (a == null) return@forEachIndexed
-                    val (status, color) = tileStatus(a, settings, media, badges[a.packageName] ?: 0)
-                    ActionRow(
-                        "%02d".format(i + 1), a.upper, a.category, status, color,
-                        onClick = { open(a) }, onLongClick = { menuSlot = i }
-                    ) { AppIcon(a, settings.tintedIcons, 34.dp) }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(p.text.copy(alpha = 0.07f)))
-                }
-            }
         }
 
-        Spacer(Modifier.height(18.dp))
-        CyberButton("▲ TODAS LAS APPS  [${apps.size}]", Modifier.fillMaxWidth(), height = 48.dp) { nav.go(Routes.DRAWER) }
+        PagerDots(pager.currentPage, pager.pageCount, homeIndex, holoPages == 1, Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp))
     }
+
+    appMenu?.let { a ->
+        HudMenu(
+            a.label,
+            listOf(
+                "AÑADIR A FAVORITOS" to {
+                    val list = favs.toMutableList()
+                    val slot = list.indexOfFirst { it == null }.takeIf { it >= 0 } ?: 8
+                    list[slot] = a
+                    saveFavs(list)
+                },
+                "INFO DE LA APP" to { c.apps.openInfo(a) },
+                "DESINSTALAR" to { c.apps.uninstall(a) }
+            ),
+            onDismiss = { appMenu = null }
+        )
     }
 
     if (menuSlot >= 0) {
@@ -194,13 +245,13 @@ private fun TopStrip(linked: Boolean, w: WeatherState, onTap: () -> Unit, onLong
 }
 
 @Composable
-private fun WeatherModule(w: WeatherState, modifier: Modifier, onClick: () -> Unit) {
+private fun WeatherModule(w: WeatherState, glass: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val p = AtmosTheme.p
     val shape = CutShape(12.dp, 12.dp)
     Column(
         modifier
             .clip(shape)
-            .background(p.bg)
+            .background(if (glass) p.bg.copy(alpha = 0.55f) else p.bg)
             .border(1.dp, p.secondary, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 9.dp),
@@ -257,7 +308,7 @@ fun rememberPosition(m: MediaState): State<Long> {
 }
 
 @Composable
-private fun MiniPlayer(m: MediaState, onOpen: () -> Unit) {
+private fun MiniPlayer(m: MediaState, glass: Boolean, onOpen: () -> Unit) {
     val p = AtmosTheme.p
     val pos by rememberPosition(m)
     val shape = CutShape(br = 12.dp)
@@ -265,7 +316,7 @@ private fun MiniPlayer(m: MediaState, onOpen: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(p.panel)
+            .background(if (glass) p.panel.copy(alpha = 0.6f) else p.panel)
             .border(1.dp, p.secondary.copy(alpha = 0.7f), shape)
             .clickable(onClick = onOpen)
             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -335,13 +386,13 @@ private fun tileStatus(a: AppEntry, s: LauncherSettings, m: MediaState?, badge: 
 }
 
 @Composable
-private fun AppTile(a: AppEntry, s: LauncherSettings, m: MediaState?, badge: Int, onClick: () -> Unit, onLong: () -> Unit) {
+private fun AppTile(a: AppEntry, s: LauncherSettings, m: MediaState?, badge: Int, glass: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val p = AtmosTheme.p
     val shape = CutShape(br = 12.dp)
     val (status, statusColor) = tileStatus(a, s, m, badge)
     Pressable(
-        Modifier.height(104.dp).border(1.dp, p.primary.copy(alpha = 0.22f), shape),
-        shape = shape, idle = p.panel, onClick = onClick, onLongClick = onLong
+        Modifier.height(104.dp).border(1.dp, p.primary.copy(alpha = if (glass) 0.35f else 0.22f), shape),
+        shape = shape, idle = if (glass) p.panel.copy(alpha = 0.55f) else p.panel, onClick = onClick, onLongClick = onLong
     ) { pressed ->
         val fg = if (pressed) p.onPrimary else p.text
         Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 9.dp), verticalArrangement = Arrangement.SpaceBetween) {
@@ -370,5 +421,73 @@ private fun EmptyTile(onClick: () -> Unit) {
     val shape = CutShape(br = 12.dp)
     Pressable(Modifier.height(104.dp).border(1.dp, p.primary.copy(alpha = 0.12f), shape), shape = shape, onClick = onClick) { pressed ->
         Text("+ AÑADIR", style = mono(11.sp, 0.16f, if (pressed) p.onPrimary else p.muted), modifier = Modifier.align(Alignment.Center))
+    }
+}
+
+/** Página del holograma: casi vacía a propósito, con un marco de visor para «enmarcar» la proyección. */
+@Composable
+private fun HoloPage(time: String, date: String, onBack: () -> Unit) {
+    val p = AtmosTheme.p
+    Box(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .drawBehind {
+                val arm = 26.dp.toPx(); val sw = 2.dp.toPx(); val w = size.width; val h = size.height
+                val c = p.primary
+                fun r(x: Float, y: Float, rw: Float, rh: Float) = drawRect(c, Offset(x, y), androidx.compose.ui.geometry.Size(rw, rh))
+                r(0f, 0f, arm, sw); r(0f, 0f, sw, arm)
+                r(w - arm, 0f, arm, sw); r(w - sw, 0f, sw, arm)
+                r(0f, h - sw, arm, sw); r(0f, h - arm, sw, arm)
+                r(w - arm, h - sw, arm, sw); r(w - sw, h - arm, sw, arm)
+            }
+            .padding(14.dp)
+    ) {
+        Row(Modifier.align(Alignment.TopStart), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.background(p.secondary).padding(horizontal = 6.dp, vertical = 1.dp)) { Text("REC", style = mono(10.sp, 0.16f, p.onPrimary)) }
+            Spacer(Modifier.width(8.dp))
+            Text("00 // PROYECCIÓN HOLOGRÁFICA", style = mono(10.sp, 0.16f, p.muted))
+        }
+        Column(Modifier.align(Alignment.BottomStart)) {
+            Text(time, style = raj(34.sp, tracking = 0f, color = p.primary))
+            Text(date, style = mono(11.sp, 0.2f, p.secondary))
+        }
+        Text("INICIO ▶", style = mono(11.sp, 0.2f, p.primary), modifier = Modifier.align(Alignment.BottomEnd).clickable(onClick = onBack).padding(6.dp))
+    }
+}
+
+/** Todas las apps como módulos, 12 por página (3×4), en orden alfabético. */
+@Composable
+private fun AppsPage(
+    apps: List<AppEntry>, index: Int, total: Int, s: LauncherSettings, m: MediaState?, badges: Map<String, Int>, glass: Boolean,
+    onOpen: (AppEntry) -> Unit, onLong: (AppEntry) -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 40.dp)) {
+        val first = apps.firstOrNull()?.upper?.take(1) ?: ""
+        val last = apps.lastOrNull()?.upper?.take(1) ?: ""
+        BlockLabel("%02d".format(index + 3), "MÓDULOS  $first–$last") {
+            Text("${index + 1}/$total", style = mono(11.sp, 0.16f, AtmosTheme.p.secondary))
+        }
+        Spacer(Modifier.height(12.dp))
+        SimpleGrid(3, 10.dp) {
+            apps.forEach { a -> AppTile(a, s, m, badges[a.packageName] ?: 0, glass, onClick = { onOpen(a) }, onLong = { onLong(a) }) }
+        }
+    }
+}
+
+/** Indicador de páginas: ◈ holograma, barra larga = inicio, barras cortas = módulos. */
+@Composable
+private fun PagerDots(current: Int, count: Int, home: Int, hasHolo: Boolean, modifier: Modifier) {
+    val p = AtmosTheme.p
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+        for (i in 0 until count) {
+            val on = i == current
+            val c = if (on) p.primary else p.primary.copy(alpha = 0.25f)
+            when {
+                hasHolo && i == 0 -> Text("◈", style = mono(11.sp, 0f, if (on) p.secondary else p.secondary.copy(alpha = 0.4f)))
+                i == home -> Box(Modifier.size(22.dp, 4.dp).background(c))
+                else -> Box(Modifier.size(10.dp, 4.dp).background(c))
+            }
+        }
     }
 }

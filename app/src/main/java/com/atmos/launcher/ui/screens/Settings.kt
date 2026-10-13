@@ -287,12 +287,13 @@ private fun HologramBlock(settings: LauncherSettings) {
         }
     }
     Text(
-        "Una imagen tuya (anime, personaje…) proyectada detrás de los módulos y teñida con la plantilla. Funciona mejor sobre fondo oscuro.",
+        "Una imagen tuya (anime, personaje…) proyectada detrás de los módulos y teñida con la plantilla. Desliza el inicio hacia la derecha para verla entera. Funciona mejor sobre fondo oscuro.",
         style = mono(10.sp, 0.06f, p.muted)
     )
     if (settings.hologramPath != null) {
-        Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(160.dp).background(p.bg)) {
-            HologramBackdrop(settings.hologramPath, 2, Modifier.matchParentSize())
+        val bmp = rememberHologramBitmap(settings.hologramPath)
+        Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(200.dp).background(p.bg)) {
+            if (bmp != null) HologramBackdrop(bmp, alpha = { 1f }, modifier = Modifier.matchParentSize())
         }
         Spacer(Modifier.height(10.dp))
         Segmented(listOf(0, 1, 2), settings.hologramLevel, { listOf("SUTIL", "MEDIO", "INTENSO")[it] }) { l ->
