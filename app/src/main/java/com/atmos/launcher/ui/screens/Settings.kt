@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -176,7 +177,8 @@ fun SettingsScreen(settings: LauncherSettings, nav: NavHostController) {
             Text("La ciudad y el GPS se eligen en ATMOS; el launcher solo lee su caché (sin red propia).", style = mono(10.sp, 0.06f, p.muted), modifier = Modifier.padding(top = 6.dp))
             CyberButton("ABRIR ATMOS ↗", Modifier.fillMaxWidth().padding(top = 10.dp)) { c.weather.openAtmos() }
         }
-        HudPanel("07", "PERMISOS") { PermissionsBlock() }
+        HudPanel("07", "HOLOGRAMA", trailing = "FONDO DEL INICIO") { HologramBlock(settings) }
+        HudPanel("08", "PERMISOS", accent = p.secondary) { PermissionsBlock() }
         Text("ATMOS//OS LAUNCHER v0.1", style = mono(10.sp, 0.16f, p.muted))
     }
 }
@@ -265,5 +267,44 @@ private fun SegBarSteps(step: Int) {
     val p = AtmosTheme.p
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(3) { i -> Box(Modifier.weight(1f).height(4.dp).background(if (i <= step) p.primary else p.primary.copy(alpha = 0.15f))) }
+    }
+}
+
+@Composable
+private fun HologramBlock(settings: LauncherSettings) {
+    val c = LocalContainer.current
+    val ctx = LocalContext.current
+    val p = AtmosTheme.p
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            busy = true
+            scope.launch {
+                HologramStore.import(ctx, uri)?.let { c.settings.setHologram(it) }
+                busy = false
+            }
+        }
+    }
+    Text(
+        "Una imagen tuya (anime, personaje…) proyectada detrás de los módulos y teñida con la plantilla. Funciona mejor sobre fondo oscuro.",
+        style = mono(10.sp, 0.06f, p.muted)
+    )
+    if (settings.hologramPath != null) {
+        Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(160.dp).background(p.bg)) {
+            HologramBackdrop(settings.hologramPath, 2, Modifier.matchParentSize())
+        }
+        Spacer(Modifier.height(10.dp))
+        Segmented(listOf(0, 1, 2), settings.hologramLevel, { listOf("SUTIL", "MEDIO", "INTENSO")[it] }) { l ->
+            scope.launch { c.settings.setHologramLevel(l) }
+        }
+    }
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CyberButton(if (busy) "CARGANDO…" else "ELEGIR IMAGEN", Modifier.weight(1f), filled = true) {
+            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+        if (settings.hologramPath != null) CyberButton("QUITAR", Modifier.weight(1f), color = p.secondary) {
+            scope.launch { HologramStore.clear(ctx); c.settings.setHologram(null) }
+        }
     }
 }

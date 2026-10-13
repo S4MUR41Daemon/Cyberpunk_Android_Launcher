@@ -93,6 +93,8 @@ fun HomeScreen(settings: LauncherSettings, nav: NavHostController, onOpenShade: 
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
+    HologramBackdrop(settings.hologramPath, settings.hologramLevel, Modifier.matchParentSize())
     Column(
         Modifier
             .fillMaxSize()
@@ -144,6 +146,7 @@ fun HomeScreen(settings: LauncherSettings, nav: NavHostController, onOpenShade: 
 
         Spacer(Modifier.height(18.dp))
         CyberButton("▲ TODAS LAS APPS  [${apps.size}]", Modifier.fillMaxWidth(), height = 48.dp) { nav.go(Routes.DRAWER) }
+    }
     }
 
     if (menuSlot >= 0) {

@@ -29,7 +29,10 @@ data class LauncherSettings(
     /** Claves «paquete/clase», 9 huecos; "" = hueco vacío. null = aún sin elegir (usar los por defecto). */
     val favorites: List<String>? = null,
     val messagingPackages: Set<String> = DEFAULT_MESSAGING,
-    val onboardingDone: Boolean = false
+    val onboardingDone: Boolean = false,
+    /** Imagen del holograma de fondo (copiada a almacenamiento interno) e intensidad 0..2. */
+    val hologramPath: String? = null,
+    val hologramLevel: Int = 1
 ) {
     companion object {
         val DEFAULT_MESSAGING = setOf("com.whatsapp", "com.whatsapp.w4b")
@@ -50,6 +53,8 @@ class SettingsStore(private val ctx: Context) {
     private val FAVS = stringPreferencesKey("favorites")
     private val MSG = stringSetPreferencesKey("messaging")
     private val ONBOARD = booleanPreferencesKey("onboarding_done")
+    private val HOLO = stringPreferencesKey("hologram_path")
+    private val HOLO_LVL = androidx.datastore.preferences.core.intPreferencesKey("hologram_level")
 
     val settings: Flow<LauncherSettings> = ctx.store.data.map(::read)
 
@@ -62,7 +67,9 @@ class SettingsStore(private val ctx: Context) {
         tintedIcons = p[TINT] ?: true,
         favorites = p[FAVS]?.split('|'),
         messagingPackages = p[MSG] ?: LauncherSettings.DEFAULT_MESSAGING,
-        onboardingDone = p[ONBOARD] ?: false
+        onboardingDone = p[ONBOARD] ?: false,
+        hologramPath = p[HOLO],
+        hologramLevel = p[HOLO_LVL] ?: 1
     )
 
     suspend fun setTheme(id: String) = ctx.store.edit { it[THEME] = id }
@@ -71,5 +78,11 @@ class SettingsStore(private val ctx: Context) {
     suspend fun setTinted(v: Boolean) = ctx.store.edit { it[TINT] = v }
     suspend fun setFavorites(list: List<String>) = ctx.store.edit { it[FAVS] = list.joinToString("|") }
     suspend fun setMessaging(pkgs: Set<String>) = ctx.store.edit { it[MSG] = pkgs }
+    suspend fun setHologram(path: String?) {
+        ctx.store.edit { prefs ->
+            if (path == null) prefs.remove(HOLO) else prefs[HOLO] = path
+        }
+    }
+    suspend fun setHologramLevel(l: Int) = ctx.store.edit { it[HOLO_LVL] = l }
     suspend fun setOnboardingDone() = ctx.store.edit { it[ONBOARD] = true }
 }
