@@ -1,5 +1,11 @@
 # ATMOS//OS Launcher
 
+## ⬇️ Descargar
+
+**[Descarga la última APK aquí](https://github.com/S4MUR41Daemon/Cyberpunk_Android_Launcher/releases/latest)** (en *Assets*). No hace falta compilar nada: ábrela en el móvil y acepta instalar.
+Las versiones se publican solas: al crear un tag `vX.Y.Z`, GitHub Actions compila la APK firmada y la sube a *Releases*.
+
+
 Launcher Android (Kotlin + Jetpack Compose) con la estética de la app del tiempo **ATMOS**:
 paneles con esquinas cortadas, cabeceras numeradas `01 //`, números rayados con aberración cromática
 y las mismas 4 plantillas (Night City, EVA001, Noche de neón, Green Lantern).
